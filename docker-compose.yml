@@ -22,22 +22,6 @@ services:
     networks:
       - backend
 
-  php-fpm:
-    build: ./php
-    container_name: ${PROJECT_NAME}_phpfpm
-    restart: always
-    volumes:
-      - ./php:/var/www/html
-    depends_on:
-      - mariadb
-    environment:
-      MYSQL_HOST: ${MYSQL_HOST:-mariadb}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    networks:
-      - backend
-
   flask:
     build: ./python
     container_name: ${PROJECT_NAME}_flask
@@ -64,10 +48,9 @@ services:
     ports:
       - "${WEB_PORT}:80"
     volumes:
-      - ./php:/var/www/html
+      - ./python:/var/www/html
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - php-fpm
       - flask
     networks:
       - backend

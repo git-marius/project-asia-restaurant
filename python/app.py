@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route("/hello")
 def hello():
-    return jsonify({"message": "Flask laeuft über Nginx unter /api"})
+    return jsonify({"message": "Flask laeuft ueber Nginx unter /api"})
 
 @app.route("/db")
 def db_test():
