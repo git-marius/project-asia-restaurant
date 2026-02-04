@@ -29,6 +29,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any
 import math
+from typing import Iterable, Tuple
+import statistics
 
 @dataclass(frozen=True)
 class Baseline:
@@ -43,7 +45,7 @@ class Baseline:
 
     @property
     def abs_humidity_g_m3(self) -> float:
-        return absolute_humidity_g_m3(self.temperature_c, self.rh_percent)
+        return absolute_humidity_g_m3(self.temperature_c, self.rh_percent)  
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,49 @@ class ModelConfig:
 # -----------------------------
 # Helpers
 # -----------------------------
+def calculate_baseline_from_window(
+    readings: Iterable[Tuple[float, float, float]],
+    *,
+    warmup_count: int = 30,
+    window_count: int = 60,
+) -> Baseline:
+    """
+    Erzeugt eine Baseline aus einem Start-Zeitfenster.
+
+    readings: Iterable von Tupeln (temperature_c, rh_percent, gas_resistance_ohm)
+
+    Vorgehen:
+    1) Ignoriere die ersten warmup_count Samples (Sensor "einlaufen" lassen)
+    2) Nimm die nächsten window_count Samples als Baseline-Fenster
+    3) Setze Baseline-Werte als Median (robust gegen Ausreißer):
+       - baseline.temperature_c = Median(T)
+       - baseline.rh_percent    = Median(RH)
+       - baseline.gas_resistance_ohm = Median(Rgas)
+
+    Hinweis:
+    - warmup_count/window_count hängen von deiner Messrate ab.
+      Beispiel: 1 Sample / 10s -> warmup_count=30 entspricht 5 min,
+      window_count=60 entspricht 10 min Fenster.
+    """
+    data = list(readings)
+    if window_count <= 0:
+        raise ValueError("window_count muss > 0 sein")
+    if warmup_count < 0:
+        raise ValueError("warmup_count muss >= 0 sein")
+    if len(data) < warmup_count + window_count:
+        raise ValueError("Nicht genug Samples für warmup_count + window_count")
+
+    window = data[warmup_count : warmup_count + window_count]
+
+    temps = [t for (t, rh, rgas) in window]
+    rhs = [rh for (t, rh, rgas) in window]
+    gases = [rgas for (t, rh, rgas) in window]
+
+    t0 = float(statistics.median(temps))
+    rh0 = float(statistics.median(rhs))
+    r0 = float(statistics.median(gases))
+
+    return Baseline(temperature_c=t0, rh_percent=rh0, gas_resistance_ohm=r0)
 
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
