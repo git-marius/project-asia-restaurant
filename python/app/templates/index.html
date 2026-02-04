@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+
+{% block title %}
+  Dashboard
+{% endblock %}
+
+{% block header %}
+  <h1>Mitarbeiter-Dashboard</h1>
+{% endblock %}
+
+{% block content %}
+  <div class="container">
+    <!-- Aktuelle Werte -->
+    <div class="row text-center mb-4">
+      <div class="col-md-4">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">Aktuelle Temperatur</h5>
+            <h2 id="temp-now">22.4 °C</h2>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">Personen im Raum</h5>
+            <h2 id="people-now">15</h2>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">Letztes Update</h5>
+            <h2 id="last-update">14:35</h2>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Temperaturverlauf -->
+    <div class="row mb-4">
+      <div class="col">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title text-center">Temperaturverlauf (letzte Stunden)</h5>
+            <canvas id="tempChart" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Punktediagramm -->
+    <div class="row">
+      <div class="col">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title text-center">Zusammenhang: Personenanzahl & Temperatur</h5>
+            <canvas id="scatterChart" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === FAKE DATEN ===
+    
+    // Temperaturverlauf (x = Zeit, y = °C)
+    const tempLabels = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00']
+    const tempValues = [20.1, 21.3, 22.0, 22.7, 23.1, 22.8, 22.4]
+    
+    // Scatter-Daten (Personen vs Temperatur)
+    const scatterData = [
+      { x: 5, y: 20.1 },
+      { x: 8, y: 21.3 },
+      { x: 10, y: 22.0 },
+      { x: 14, y: 22.7 },
+      { x: 16, y: 23.1 },
+      { x: 13, y: 22.8 },
+      { x: 15, y: 22.4 }
+    ]
+    
+    // === TEMPERATURVERLAUF ===
+    new Chart(document.getElementById('tempChart'), {
+      type: 'line',
+      data: {
+        labels: tempLabels,
+        datasets: [
+          {
+            label: 'Temperatur (°C)',
+            data: tempValues,
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.3,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          y: {
+            beginAtZero: false
+          }
+        }
+      }
+    })
+    
+    // === SCATTER-DIAGRAMM MIT TRENDLINIE ===
+    const ctx = document.getElementById('scatterChart')
+    const scatterChart = new Chart(ctx, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: 'Messpunkte',
+            data: scatterData,
+            backgroundColor: 'rgba(54, 162, 235, 0.7)'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            title: { display: true, text: 'Personenanzahl' },
+            beginAtZero: true
+          },
+          y: {
+            title: { display: true, text: 'Temperatur (°C)' },
+            beginAtZero: false
+          }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    })
+    
+    // === TRENDLINIE BERECHNEN ===
+    function calcLinear(data) {
+      const n = data.length
+      const sumX = data.reduce((a, b) => a + b.x, 0)
+      const sumY = data.reduce((a, b) => a + b.y, 0)
+      const sumXY = data.reduce((a, b) => a + b.x * b.y, 0)
+      const sumX2 = data.reduce((a, b) => a + b.x * b.x, 0)
+      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX)
+      const intercept = (sumY - slope * sumX) / n
+      return { slope, intercept }
+    }
+    
+    const { slope, intercept } = calcLinear(scatterData)
+    
+    // Trendlinie erzeugen
+    const trendlineData = scatterData.map((p) => ({
+      x: p.x,
+      y: slope * p.x + intercept
+    }))
+    
+    scatterChart.data.datasets.push({
+      label: 'Trendlinie',
+      type: 'line',
+      data: trendlineData,
+      borderColor: 'rgb(255, 99, 132)',
+      borderWidth: 2,
+      fill: false,
+      pointRadius: 0,
+      tension: 0
+    })
+    
+    scatterChart.update()
+  </script>
+{% endblock %}
