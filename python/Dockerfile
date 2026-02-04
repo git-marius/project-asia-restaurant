@@ -11,5 +11,5 @@ COPY . .
 
 EXPOSE ${FLASK_PORT}
 
-CMD ["uv", "run", "flask", "--app", "wsgi", "run", "--host=0.0.0.0", "--port=5000"]
+CMD ["uv", "run", "flask", "--app", "wsgi", "run", "--host=0.0.0.0", "--port=5000", "--debug"]
 #prod: CMD ["uv", "run", "gunicorn", "-b", "0.0.0.0:5000", "wsgi:app"]
