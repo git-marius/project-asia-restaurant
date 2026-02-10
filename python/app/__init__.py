@@ -12,7 +12,7 @@ def create_app():
     migrate.init_app(app, db)
 
     with app.app_context():
-        import app.models
+        from . import models
 
     app.register_blueprint(bp)
 

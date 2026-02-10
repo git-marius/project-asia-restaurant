@@ -1,1 +1,1 @@
-from room_data import RoomData
+from .room_data import RoomData
