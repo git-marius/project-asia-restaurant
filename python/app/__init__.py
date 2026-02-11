@@ -5,7 +5,6 @@ from .routes import bp
 
 
 def create_app():
-    #rename app to flask_app
     flask_app = Flask(__name__)
     flask_app.config.from_object(Config)
 
