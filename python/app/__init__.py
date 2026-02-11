@@ -5,15 +5,16 @@ from .routes import bp
 
 
 def create_app():
-    app = Flask(__name__)
-    app.config.from_object(Config)
+    #rename app to flask_app
+    flask_app = Flask(__name__)
+    flask_app.config.from_object(Config)
 
-    db.init_app(app)
-    migrate.init_app(app, db)
+    db.init_app(flask_app)
+    migrate.init_app(flask_app, db)
 
-    with app.app_context():
+    with flask_app.app_context():
         from . import models
 
-    app.register_blueprint(bp)
+    flask_app.register_blueprint(bp)
 
-    return app
+    return flask_app
