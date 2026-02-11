@@ -22,6 +22,13 @@ services:
     networks:
       - backend
 
+  redis:
+    image: redis:7-alpine
+    container_name: ${PROJECT_NAME}_redis
+    restart: always
+    networks:
+      - backend
+
   flask:
     build: ./python
     container_name: ${PROJECT_NAME}_flask
@@ -32,12 +39,59 @@ services:
       - ./python:/app
     depends_on:
       - mariadb
+      - redis
     environment:
       DB_HOST: ${FLASK_DB_HOST}
       DB_USER: ${FLASK_DB_USER}
       DB_PASS: ${FLASK_DB_PASS}
       DB_NAME: ${FLASK_DB_NAME}
       PORT: ${FLASK_PORT}
+
+      TZ: Europe/Berlin
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    networks:
+      - backend
+
+  celery_worker:
+    build: ./python
+    container_name: ${PROJECT_NAME}_celery_worker
+    restart: always
+    volumes:
+      - ./python:/app
+    depends_on:
+      - mariadb
+      - redis
+    environment:
+      DB_HOST: ${FLASK_DB_HOST}
+      DB_USER: ${FLASK_DB_USER}
+      DB_PASS: ${FLASK_DB_PASS}
+      DB_NAME: ${FLASK_DB_NAME}
+      TZ: Europe/Berlin
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: ["uv", "run", "celery", "-A", "app.celery_app:celery", "worker", "--loglevel=INFO"]
+    networks:
+      - backend
+
+  celery_beat:
+    build: ./python
+    container_name: ${PROJECT_NAME}_celery_beat
+    restart: always
+    volumes:
+      - ./python:/app
+    depends_on:
+      - mariadb
+      - redis
+    environment:
+      DB_HOST: ${FLASK_DB_HOST}
+      DB_USER: ${FLASK_DB_USER}
+      DB_PASS: ${FLASK_DB_PASS}
+      DB_NAME: ${FLASK_DB_NAME}
+      TZ: Europe/Berlin
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    command: ["uv", "run", "celery", "-A", "app.celery_app:celery", "beat", "--loglevel=INFO"]
     networks:
       - backend
 
