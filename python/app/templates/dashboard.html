@@ -1,0 +1,271 @@
+<!-- templates/dashboard.html -->
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="muted-small">Temperatur</div>
+                <div class="kpi-value" id="kpi-temp">–</div>
+                <div class="muted-small" id="kpi-ts">–</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="muted-small">Luftfeuchtigkeit</div>
+                <div class="kpi-value" id="kpi-hum">–</div>
+                <div class="muted-small">%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="muted-small">VOC</div>
+                <div class="kpi-value" id="kpi-voc">–</div>
+                <div class="muted-small">ppm / raw</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-6 col-xl-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="muted-small">Personen</div>
+                <div class="kpi-value" id="kpi-people">–</div>
+                <div class="muted-small">Radar: <span id="kpi-radar">–</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-12 col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Temperaturverlauf</h5>
+                    <span class="muted-small">letzte 24 Stunden</span>
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="mb-2">Lineare Regression</h5>
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="p-3 bg-light rounded">
+                            <div class="muted-small">Steigung (a)</div>
+                            <div class="fw-semibold" id="reg-a">–</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 bg-light rounded">
+                            <div class="muted-small">Intercept (b)</div>
+                            <div class="fw-semibold" id="reg-b">–</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="p-3 bg-light rounded">
+                            <div class="muted-small">R²</div>
+                            <div class="fw-semibold" id="reg-r2">–</div>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <h6 class="mb-2">Vorhersagen</h6>
+                <div class="row g-2">
+                    <div class="col-4">
+                        <div class="p-2 bg-light rounded text-center">
+                            <div class="muted-small">0 Pers.</div>
+                            <div class="fw-bold" id="pred-0">–</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-light rounded text-center">
+                            <div class="muted-small">60 Pers.</div>
+                            <div class="fw-bold" id="pred-60">–</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-2 bg-light rounded text-center">
+                            <div class="muted-small">120 Pers.</div>
+                            <div class="fw-bold" id="pred-120">–</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="muted-small mt-3">
+                    Modell: Temperatur = a·Personen + b
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0">Personenanzahl & Temperatur</h5>
+                    <span class="muted-small">letzte 24 Stunden</span>
+                </div>
+                <div class="chart-wrap-sm">
+                    <canvas id="scatterChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let tempChart, scatterChart
+
+    const fmtTime = (iso) => new Date(iso).toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit' })
+    const fmtDateTime = (iso) => new Date(iso).toLocaleString('de-DE')
+
+    async function loadDashboard() {
+        const res = await fetch('/api/dashboard', { cache: 'no-store' })
+        if (!res.ok) throw new Error('API Fehler: ' + res.status)
+        return await res.json()
+    }
+
+    function roundStep(value, step) {
+        return Math.round(value / step) * step
+    }
+
+    function yBounds(values) {
+        if (!values.length) return { min: 0, max: 1 }
+        const vMin = Math.min(...values)
+        const vMax = Math.max(...values)
+        const pad = Math.max(0.5, (vMax - vMin) * 0.15) // padding 15% oder mind. 0.5
+        // auf 0.5°C runden -> stabiler bei kleinen Änderungen
+        const min = roundStep(vMin - pad, 0.5)
+        const max = roundStep(vMax + pad, 0.5)
+        return { min, max }
+    }
+
+    function setKpis(data) {
+        const cur = data.current
+        if (!cur) return
+
+        document.getElementById('kpi-temp').textContent = `${cur.temperature.toFixed(1)} °C`
+        document.getElementById('kpi-hum').textContent = `${cur.humidity.toFixed(1)}`
+        document.getElementById('kpi-voc').textContent = `${cur.voc.toFixed(0)}`
+        document.getElementById('kpi-people').textContent = `${cur.persons}`
+        document.getElementById('kpi-radar').textContent = cur.radar ? 'Belegt' : 'Leer'
+        document.getElementById('kpi-ts').textContent = `Letztes Update: ${fmtDateTime(cur.timestamp)}`
+        document.getElementById('top-last-update').textContent = `Update: ${fmtTime(cur.timestamp)}`
+    }
+
+    function setRegression(data) {
+        const r = data.regression || {}
+        const p = data.predictions || {}
+
+        document.getElementById('reg-a').textContent = (r.slope == null) ? '–' : r.slope.toFixed(4)
+        document.getElementById('reg-b').textContent = (r.intercept == null) ? '–' : r.intercept.toFixed(2)
+        document.getElementById('reg-r2').textContent = (r.r2 == null) ? '–' : r.r2.toFixed(3)
+
+        document.getElementById('pred-0').textContent = (p.p0 == null) ? '–' : `${p.p0.toFixed(1)} °C`
+        document.getElementById('pred-60').textContent = (p.p60 == null) ? '–' : `${p.p60.toFixed(1)} °C`
+        document.getElementById('pred-120').textContent = (p.p120 == null) ? '–' : `${p.p120.toFixed(1)} °C`
+    }
+
+    function renderTemp(points) {
+        const labels = points.map(p => fmtTime(p.t))
+        const values = points.map(p => p.temperature)
+        const bounds = yBounds(values)
+
+        if (tempChart) tempChart.destroy()
+        tempChart = new Chart(document.getElementById('tempChart'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Temperatur (°C)',
+                    data: values,
+                    tension: 0.25,
+                    fill: false,
+                    pointRadius: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    y: {
+                        min: bounds.min,
+                        max: bounds.max
+                    }
+                },
+                plugins: { legend: { display: false } }
+            }
+        })
+    }
+
+    function renderScatter(points, regLine) {
+        const datasets = [{
+            label: 'Messpunkte',
+            data: points,
+            pointRadius: 3
+        }]
+
+        if (Array.isArray(regLine) && regLine.length >= 2) {
+            datasets.push({
+                label: 'Regressionslinie',
+                type: 'line',
+                data: regLine,
+                pointRadius: 0,
+                tension: 0
+            })
+        }
+
+        if (scatterChart) scatterChart.destroy()
+        scatterChart = new Chart(document.getElementById('scatterChart'), {
+            type: 'scatter',
+            data: { datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { title: { display: true, text: 'Personenanzahl' }, beginAtZero: true },
+                    y: { title: { display: true, text: 'Temperatur (°C)' } }
+                },
+                plugins: { legend: { display: false } }
+            }
+        })
+    }
+
+    async function init() {
+        const data = await loadDashboard()
+
+        setKpis(data)
+        setRegression(data)
+
+        renderTemp(data.line.points || [])
+        renderScatter(data.scatter.points || [], (data.regression && data.regression.line_points) || [])
+
+        document.getElementById('footer-generated-at').textContent =
+            `Daten geladen: ${fmtDateTime(data.meta.generated_at)}`
+    }
+
+    init()
+    setInterval(() => init().catch(console.error), 30000)
+</script>
+{% endblock %}

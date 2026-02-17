@@ -263,7 +263,7 @@ def estimate_people(
     baseline: Baseline,
     cfg: ModelConfig,
     room: RoomConfig,
-) -> Dict[str, Any]:
+) -> int:
     idx = combined_index(
         temperature_c=temperature_c,
         rh_percent=rh_percent,

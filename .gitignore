@@ -26,3 +26,6 @@ instance/
 build/
 dist/
 *.egg-info/
+python/celerybeat-schedule
+
+.docs

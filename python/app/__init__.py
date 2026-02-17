@@ -3,8 +3,14 @@ from .config import Config
 from .extensions import db, migrate
 from .routes import bp
 from .seed import seed
+import logging
 
 def create_app():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+        
     flask_app = Flask(__name__)
     flask_app.config.from_object(Config)
 
