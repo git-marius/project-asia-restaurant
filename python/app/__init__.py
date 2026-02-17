@@ -2,7 +2,7 @@ from flask import Flask
 from .config import Config
 from .extensions import db, migrate
 from .routes import bp
-
+from .seed import seed
 
 def create_app():
     flask_app = Flask(__name__)
@@ -10,6 +10,11 @@ def create_app():
 
     db.init_app(flask_app)
     migrate.init_app(flask_app, db)
+    
+    @flask_app.cli.command("seed")
+    def seed_command():
+        seed()
+        print("Seed complete")
 
     with flask_app.app_context():
         from . import models
