@@ -1,64 +1,20 @@
 <!-- templates/base.html -->
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="dark">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}Dashboard{% endblock %}</title>
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
-    .kpi-value {
-      font-size: 1.75rem;
-      font-weight: 700;
-    }
-
-    .muted-small {
-      font-size: .875rem;
-      color: #6c757d;
-    }
-
-    /* FIX: stabile Chart-Höhen -> kein Layout-Springen */
-    .chart-wrap {
-      height: 280px;
-    }
-
-    .chart-wrap-sm {
-      height: 240px;
-    }
-
-    canvas {
-      width: 100% !important;
-      height: 100% !important;
-    }
-  </style>
 
   {% block head %}{% endblock %}
 </head>
 
-<body class="bg-light">
-  <nav class="navbar navbar-dark bg-dark sticky-top">
-    <div class="container-fluid">
-      <span class="navbar-brand mb-0 h1">{% block header %}Mitarbeiter-Dashboard{% endblock %}</span>
-      <span class="text-white-50" id="top-last-update">–</span>
-    </div>
-  </nav>
-
-  <main class="container-fluid py-4">
-    {% block content %}{% endblock %}
-  </main>
-
-  <footer class="border-top bg-white py-3">
-    <div class="container-fluid d-flex justify-content-between align-items-center">
-      <div class="muted-small">CPS Dashboard</div>
-      <div class="muted-small" id="footer-generated-at">–</div>
-    </div>
-  </footer>
+<body class="min-h-screen bg-neutral-950 text-neutral-100">
+  {% block content %}{% endblock %}
 </body>
 
 </html>
