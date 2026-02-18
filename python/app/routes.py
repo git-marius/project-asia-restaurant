@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from app.extensions.db import db
 from app.models import Measurements
 from scipy.stats import linregress
+from app.models.respoitories import get_latest, get_since
 
 bp = Blueprint("main", __name__)
 
@@ -20,18 +21,8 @@ def api_dashboard():
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=24)
 
-    latest = (
-        db.session.query(Measurements)
-        .order_by(Measurements.timestamp.desc())
-        .first()
-    )
-
-    rows_24h = (
-        db.session.query(Measurements)
-        #.filter(Measurements.timestamp >= since)
-        .order_by(Measurements.timestamp.asc())
-        .all()
-    )
+    latest = get_latest()
+    rows_24h = get_since(since)
 
     xs, ys = [], []
     scatter_points = []
