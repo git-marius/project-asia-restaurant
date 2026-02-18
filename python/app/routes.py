@@ -2,7 +2,6 @@ from flask import Blueprint, render_template, jsonify
 from datetime import datetime, timedelta, timezone
 from app.extensions.db import db
 from app.models import Measurements
-
 from scipy.stats import linregress
 
 bp = Blueprint("main", __name__)
@@ -12,7 +11,9 @@ def home():
     return render_template("dashboard.html")
 
 def _dt_iso(dt: datetime) -> str:
-    return dt.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
 
 @bp.get("/api/dashboard")
 def api_dashboard():
@@ -32,9 +33,16 @@ def api_dashboard():
         .all()
     )
 
+    xs, ys = [], []
+    scatter_points = []
+    line_points = []
 
-    xs = [r.persons for r in rows_24h if r.persons is not None and r.temperature is not None]
-    ys = [r.temperature for r in rows_24h if r.persons is not None and r.temperature is not None]
+    for r in rows_24h:
+        line_points.append({"t": _dt_iso(r.timestamp), "temperature": float(r.temperature)})
+        if r.persons is not None and r.temperature is not None:
+            xs.append(int(r.persons))
+            ys.append(float(r.temperature))
+            scatter_points.append({"x": int(r.persons), "y": float(r.temperature)})
 
     slope = intercept = r2 = None
     reg_line_points = []
@@ -51,7 +59,7 @@ def api_dashboard():
             {"x": x_max, "y": slope * x_max + intercept},
         ]
 
-    def predict(x):
+    def predict(x: int):
         if slope is None or intercept is None:
             return None
         return float(slope * x + intercept)
@@ -66,23 +74,19 @@ def api_dashboard():
             "radar": bool(latest.radar),
             "timestamp": _dt_iso(latest.timestamp),
         },
-        "line": {
-            "points": [{"t": _dt_iso(r.timestamp), "temperature": float(r.temperature)} for r in rows_24h]
-        },
-        "scatter": {
-            "points": [{"x": int(r.persons), "y": float(r.temperature)} for r in rows_24h]
-        },
+        "line": {"points": line_points},
+        "scatter": {"points": scatter_points},
         "regression": {
             "slope": slope,
             "intercept": intercept,
             "r2": r2,
-            "line_points": reg_line_points
+            "line_points": reg_line_points,
         },
         "predictions": {
             "p0": predict(0),
             "p60": predict(60),
-            "p120": predict(120)
-        }
+            "p120": predict(120),
+        },
     }
 
     return jsonify(payload)

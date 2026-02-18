@@ -1,6 +1,6 @@
 from .extensions.db import db
 from .models.measurements import Measurements
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 raw_data = [
     ("2025-01-28 00:00:00", 237, 19.1, 50, 13, 1),
@@ -102,13 +102,25 @@ raw_data = [
     ("2025-01-29 23:30:00", 310, 19.9, 50, 18, 1),
 ]
 
+def _round_down_to_30min(dt: datetime) -> datetime:
+    dt = dt.replace(second=0, microsecond=0)
+    minute = (dt.minute // 30) * 30
+    return dt.replace(minute=minute)
+
 def seed():
     measurements = []
+    window = raw_data[-48:]
 
-    for ts, voc, temp, hum, persons, radar in raw_data:
+    now_utc = datetime.now(timezone.utc)
+    end_ts = _round_down_to_30min(now_utc)  # letzter Messpunkt = "jetzt" (gerundet)
+    start_ts = end_ts - timedelta(hours=24) + timedelta(minutes=30)  # erster Punkt
+
+    for i, (_, voc, temp, hum, persons, radar) in enumerate(window):
+        ts = start_ts + timedelta(minutes=30 * i)
+
         measurements.append(
             Measurements(
-                timestamp=datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc),
+                timestamp=ts,
                 temperature=temp,
                 humidity=hum,
                 voc=voc,
