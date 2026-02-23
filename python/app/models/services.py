@@ -5,32 +5,36 @@ from app.models.measurements import Measurements
 
 logger = logging.getLogger(__name__)
 
+
 def create_measurements(temperature, humidity, voc, persons, radar) -> int:
+    """Legt einen neuen Messwert in der DB an und gibt die erzeugte ID zurück."""
     m = Measurements(
         temperature=temperature,
         humidity=humidity,
         voc=voc,
         persons=persons,
-        radar=radar
+        radar=radar,
     )
     try:
-        db.session.add(m)
-        db.session.commit()
+        db.session.add(m)       # Objekt zur Session hinzufügen
+        db.session.commit()     # in die DB schreiben
         logger.info("Created measurement id=%s", m.id)
         return m.id
     except Exception:
-        db.session.rollback()
+        db.session.rollback()   # bei Fehler alles zurückrollen
         logger.exception("Failed to create measurement")
         raise
 
+
 def delete_measurements_older_than(days: int = 30) -> int:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    """Löscht Messwerte, die älter als 'days' sind, und gibt die Anzahl der gelöschten Zeilen zurück."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)  # Stichtag berechnen
 
     try:
         deleted_count = (
             db.session.query(Measurements)
-            .filter(Measurements.timestamp < cutoff)
-            .delete(synchronize_session=False)
+            .filter(Measurements.timestamp < cutoff)            # nur Datensätze vor dem Stichtag
+            .delete(synchronize_session=False)                  # direktes DELETE in SQL
         )
         db.session.commit()
         logger.info("Deleted %s measurements older than %s days (cutoff=%s)", deleted_count, days, cutoff)

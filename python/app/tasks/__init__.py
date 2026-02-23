@@ -1,1 +1,1 @@
-from . import tasks
+from . import tasks  # importiert die Tasks, damit Celery/Flask sie registriert (Side-Effect-Import)

@@ -1,1 +1,1 @@
-from .measurements import Measurements
+from .measurements import Measurements  # Modell-Klasse importieren (z. B. für DB-Registrierung/Weiterverwendung)

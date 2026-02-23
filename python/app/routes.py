@@ -7,29 +7,44 @@ from app.models.repositories import get_latest, get_since
 
 bp = Blueprint("main", __name__)
 
+
 @bp.get("/")
 def home():
+    """Liefert die Dashboard-Webseite (HTML) aus."""
     return render_template("dashboard.html")
 
+
 def _dt_iso(dt: datetime) -> str:
+    """Konvertiert ein Datum sicher nach UTC und gibt es als ISO-String zurück."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat()
 
+
 @bp.get("/api/dashboard")
 def api_dashboard():
+    """
+    API-Endpunkt fürs Dashboard:
+    - Holt den neuesten Messwert + alle Messwerte der letzten 24h
+    - Baut Datenpunkte für Linienchart (Temperatur über Zeit) und Scatterplot (Personen vs Temperatur)
+    - Rechnet eine lineare Regression (Trendlinie) inkl. R² und macht Beispiel-Vorhersagen
+    - Gibt alles als JSON zurück
+    """
     now = datetime.now(timezone.utc)
     since = now - timedelta(hours=24)
 
-    latest = get_latest()
-    rows_24h = get_since(since)
+    latest = get_latest()          # letzter Messdatensatz
+    rows_24h = get_since(since)    # Messdaten der letzten 24 Stunden
 
     xs, ys = [], []
     scatter_points = []
     line_points = []
 
     for r in rows_24h:
+        # Linie: Temperatur über Zeit
         line_points.append({"t": _dt_iso(r.timestamp), "temperature": float(r.temperature)})
+
+        # Scatter: Personenanzahl (x) gegen Temperatur (y)
         if r.persons is not None and r.temperature is not None:
             xs.append(int(r.persons))
             ys.append(float(r.temperature))
@@ -38,12 +53,14 @@ def api_dashboard():
     slope = intercept = r2 = None
     reg_line_points = []
 
+    # Regression nur, wenn genug verschiedene x-Werte vorhanden sind
     if len(xs) >= 2 and len(set(xs)) >= 2:
         res = linregress(xs, ys)
         slope = float(res.slope)
         intercept = float(res.intercept)
         r2 = float(res.rvalue ** 2)
 
+        # Trendlinie nur mit 2 Punkten (min/max) fürs Zeichnen
         x_min, x_max = min(xs), max(xs)
         reg_line_points = [
             {"x": x_min, "y": slope * x_min + intercept},
@@ -51,6 +68,7 @@ def api_dashboard():
         ]
 
     def predict(x: int):
+        """Gibt die geschätzte Temperatur für eine Personenanzahl zurück (oder None ohne Regression)."""
         if slope is None or intercept is None:
             return None
         return float(slope * x + intercept)

@@ -3,6 +3,7 @@ from .models.measurements import Measurements
 from datetime import datetime, timezone, timedelta
 
 raw_data = [
+    # Demo-/Seed-Daten im 30-Minuten-Takt: (timestamp, voc, temp, hum, persons, radar)
     ("2025-01-28 00:00:00", 237, 19.1, 50, 13, 1),
     ("2025-01-28 00:30:00", 164, 18.0, 50, 11, 1),
     ("2025-01-28 01:00:00", 200, 17.0, 53, 16, 1),
@@ -103,20 +104,21 @@ raw_data = [
 ]
 
 def _round_down_to_30min(dt: datetime) -> datetime:
+    """Rundet ein Datum auf das letzte volle 30-Minuten-Intervall ab."""
     dt = dt.replace(second=0, microsecond=0)
     minute = (dt.minute // 30) * 30
     return dt.replace(minute=minute)
 
 def seed():
     measurements = []
-    window = raw_data[-48:]
+    window = raw_data[-48:]  # letzte 48 Einträge = 24 Stunden (30-Minuten-Schritte)
 
-    now_utc = datetime.now(timezone.utc)
-    end_ts = _round_down_to_30min(now_utc)
-    start_ts = end_ts - timedelta(hours=24) + timedelta(minutes=30)
+    now_utc = datetime.now(timezone.utc)          # aktuelle Zeit in UTC
+    end_ts = _round_down_to_30min(now_utc)        # Ende auf 30 Minuten runden
+    start_ts = end_ts - timedelta(hours=24) + timedelta(minutes=30)  # Start für 24h-Fenster
 
     for i, (_, voc, temp, hum, persons, radar) in enumerate(window):
-        ts = start_ts + timedelta(minutes=30 * i)
+        ts = start_ts + timedelta(minutes=30 * i)  # Zeitstempel passend zum Index erzeugen
 
         measurements.append(
             Measurements(
@@ -125,9 +127,9 @@ def seed():
                 humidity=hum,
                 voc=voc,
                 persons=persons,
-                radar=bool(radar),
+                radar=bool(radar),  # 0/1 -> True/False
             )
         )
 
-    db.session.add_all(measurements)
-    db.session.commit()
+    db.session.add_all(measurements)  # alle Datensätze sammeln und speichern
+    db.session.commit()              # Änderungen in die DB schreiben

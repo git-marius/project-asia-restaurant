@@ -5,19 +5,23 @@ import math
 from typing import Iterable, Tuple
 import statistics
 
+
 @dataclass(frozen=True)
 class Baseline:
+    """Basiswerte (Referenz) für 'leeren/normalen' Raumzustand."""
     temperature_c: float
     rh_percent: float
     gas_resistance_ohm: float
 
     @property
     def abs_humidity_g_m3(self) -> float:
-        return absolute_humidity_g_m3(self.temperature_c, self.rh_percent)  
+        """Absolute Luftfeuchte der Baseline (aus Temp + rel. Feuchte berechnet)."""
+        return absolute_humidity_g_m3(self.temperature_c, self.rh_percent)
 
 
 @dataclass(frozen=True)
 class RoomConfig:
+    """Raumparameter für die Skalierung (Volumen und Luftwechselrate)."""
     area_m2: float = 180.0
     height_m: float = 3.0
     ach_per_hour: float = 2.0
@@ -27,11 +31,12 @@ class RoomConfig:
 
 @dataclass(frozen=True)
 class ModelConfig:
+    """Modellparameter (Gewichte, Grenzen und Referenzpunkt für 'voll')."""
     weight_gas: float = 0.8
     weight_hum: float = 0.2
 
     n_max: int = 125
-    i_ref_full: float = 0.20 
+    i_ref_full: float = 0.20
     gas_temp_coeff_per_C: float = 0.00
 
     min_gas_ohm: float = 1000.0
@@ -44,6 +49,7 @@ def calculate_baseline_from_window(
     warmup_count: int = 30,
     window_count: int = 60,
 ) -> Baseline:
+    """Berechnet eine Baseline aus einem Messfenster (Median nach Warmup-Phase)."""
     data = list(readings)
     if window_count <= 0:
         raise ValueError("window_count muss > 0 sein")
@@ -52,7 +58,7 @@ def calculate_baseline_from_window(
     if len(data) < warmup_count + window_count:
         raise ValueError("Nicht genug Samples für warmup_count + window_count")
 
-    window = data[warmup_count : warmup_count + window_count]
+    window = data[warmup_count: warmup_count + window_count]
 
     temps = [t for (t, rh, rgas) in window]
     rhs = [rh for (t, rh, rgas) in window]
@@ -64,17 +70,21 @@ def calculate_baseline_from_window(
 
     return Baseline(temperature_c=t0, rh_percent=rh0, gas_resistance_ohm=r0)
 
+
 def clamp(x: float, lo: float, hi: float) -> float:
+    """Begrenzt x auf den Bereich [lo, hi]."""
     return max(lo, min(hi, x))
 
 
 def room_volume_m3(room: RoomConfig) -> float:
+    """Berechnet das Raumvolumen in m³."""
     if room.area_m2 <= 0 or room.height_m <= 0:
         raise ValueError("area_m2 und height_m müssen > 0 sein")
     return room.area_m2 * room.height_m
 
 
 def airflow_m3_per_h(room: RoomConfig) -> float:
+    """Berechnet den Luftdurchsatz (m³/h) aus Luftwechselrate und Volumen."""
     v = room_volume_m3(room)
     if room.ach_per_hour < 0:
         raise ValueError("ach_per_hour muss >= 0 sein")
@@ -82,6 +92,7 @@ def airflow_m3_per_h(room: RoomConfig) -> float:
 
 
 def absolute_humidity_g_m3(temperature_c: float, rh_percent: float) -> float:
+    """Rechnet relative Luftfeuchte in absolute Luftfeuchte (g/m³) um."""
     if not (0.0 <= rh_percent <= 100.0):
         raise ValueError("rh_percent muss zwischen 0 und 100 liegen")
 
@@ -94,6 +105,7 @@ def absolute_humidity_g_m3(temperature_c: float, rh_percent: float) -> float:
 def corrected_baseline_gas_ohm(
     baseline: Baseline, temperature_c: float, cfg: ModelConfig
 ) -> float:
+    """Korrigiert die Baseline-Gas-Resistenz optional temperaturabhängig."""
     if baseline.gas_resistance_ohm <= 0:
         raise ValueError("baseline gas_resistance_ohm muss > 0 sein")
     k = cfg.gas_temp_coeff_per_C
@@ -103,10 +115,12 @@ def corrected_baseline_gas_ohm(
 
 
 def gas_index(gas_res_ohm: float, baseline_gas_ohm: float) -> float:
+    """Index aus Gas-Sensor: je kleiner als Baseline, desto 'schlechter' (mehr Belastung)."""
     return max(0.0, (baseline_gas_ohm - gas_res_ohm) / baseline_gas_ohm)
 
 
 def hum_index(abs_hum_g_m3: float, baseline_abs_hum_g_m3: float) -> float:
+    """Index aus Luftfeuchte: je höher als Baseline, desto größer der Index."""
     if baseline_abs_hum_g_m3 <= 0:
         raise ValueError("baseline abs humidity muss > 0 sein")
     return max(0.0, (abs_hum_g_m3 - baseline_abs_hum_g_m3) / baseline_abs_hum_g_m3)
@@ -119,6 +133,7 @@ def combined_index(
     baseline: Baseline,
     cfg: ModelConfig,
 ) -> Dict[str, float]:
+    """Baut einen kombinierten Index (Gas + Feuchte) als Grundlage für die Personen-Schätzung."""
     if not (cfg.min_gas_ohm <= gas_resistance_ohm <= cfg.max_gas_ohm):
         raise ValueError(
             f"gas_resistance_ohm außerhalb plausibler Grenzen ({cfg.min_gas_ohm}..{cfg.max_gas_ohm})"
@@ -132,6 +147,7 @@ def combined_index(
     ig = gas_index(gas_resistance_ohm, base_gas_corr)
     ih = hum_index(abs_h, base_abs_h)
 
+    # Gewichte normalisieren (falls nicht 1.0)
     w_sum = cfg.weight_gas + cfg.weight_hum
     if w_sum <= 0:
         raise ValueError("Summe der Gewichte muss > 0 sein")
@@ -149,14 +165,16 @@ def combined_index(
         "baseline_gas_corrected_ohm": base_gas_corr,
     }
 
+
 def estimate_occupancy_from_index(index_value: float, cfg: ModelConfig) -> float:
-    """Roh-Schätzung (float) vor Raumskalierung."""
+    """Rechnet den Index linear auf eine Roh-Personenzahl um (ohne Raumskalierung)."""
     if cfg.i_ref_full <= 0:
         raise ValueError("i_ref_full muss > 0 sein")
     return cfg.n_max * (index_value / cfg.i_ref_full)
 
 
 def scale_occupancy_by_room(n_est: float, room: RoomConfig) -> float:
+    """Skaliert die Roh-Personenzahl auf den echten Raum (Volumen + Luftwechselrate)."""
     v = room_volume_m3(room)
     if room.v_ref_m3 <= 0 or room.ach_ref_per_hour <= 0:
         raise ValueError("Referenzwerte müssen > 0 sein")
@@ -171,6 +189,7 @@ def estimate_people(
     cfg: ModelConfig,
     room: RoomConfig,
 ) -> int:
+    """Hauptfunktion: berechnet aus Sensorwerten eine geschätzte Personenanzahl (0..n_max)."""
     idx = combined_index(
         temperature_c=temperature_c,
         rh_percent=rh_percent,
@@ -179,14 +198,15 @@ def estimate_people(
         cfg=cfg,
     )
 
-    n_raw = estimate_occupancy_from_index(idx["index"], cfg)
-    n_scaled = scale_occupancy_by_room(n_raw, room)
-    n_final = int(round(clamp(n_scaled, 0.0, float(cfg.n_max))))
+    n_raw = estimate_occupancy_from_index(idx["index"], cfg)      # Rohwert aus Index
+    n_scaled = scale_occupancy_by_room(n_raw, room)               # an Raum anpassen
+    n_final = int(round(clamp(n_scaled, 0.0, float(cfg.n_max))))  # begrenzen + runden
 
     return n_final
 
 
 if __name__ == "__main__":
+    # Mini-Testlauf (direktes Ausführen der Datei)
     room = RoomConfig(area_m2=180.0, height_m=3.0, ach_per_hour=2.0, v_ref_m3=300.0, ach_ref_per_hour=2.0)
     cfg = ModelConfig(weight_gas=0.8, weight_hum=0.2, n_max=125, i_ref_full=0.20, gas_temp_coeff_per_C=0.0)
     baseline = Baseline(temperature_c=21.0, rh_percent=35.0, gas_resistance_ohm=22000.0)
