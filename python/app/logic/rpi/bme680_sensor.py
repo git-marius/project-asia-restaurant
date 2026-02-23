@@ -1,4 +1,4 @@
-import python.app.logic.rpi.bme680 as bme680
+import app.logic.rpi.bme680 as bme680
 
 def init_sensor():
     try:

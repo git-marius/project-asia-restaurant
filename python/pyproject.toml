@@ -1,8 +1,7 @@
 [project]
-name = "python"
+name = "project-asia-restaurant"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Asia-Restaurant Projekt"
 requires-python = ">=3.12"
 dependencies = [
     "blinker==1.9.0",

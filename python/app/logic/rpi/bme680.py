@@ -1,6 +1,6 @@
 import time
-import bme680_sensor
-import motion_sensor
+import app.logic.rpi.bme680_sensor as bme680_sensor
+import app.logic.rpi.motion_sensor as motion_sensor
 
 sensor = bme680_sensor.init_sensor()
 

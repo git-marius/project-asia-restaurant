@@ -18,7 +18,7 @@ def make_celery() -> Celery:
         timezone=os.getenv("TZ", "Europe/Berlin"),
         enable_utc=True,
     )
-    celery.autodiscover_tasks(["app.tasks"])
+    #celery.autodiscover_tasks(["app.tasks"])
     celery.conf.beat_schedule = {
         "read-measurements": {
             "task": "measurements.read_job TEST",
