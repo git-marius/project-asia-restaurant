@@ -20,7 +20,7 @@ def make_celery() -> Celery:
         enable_utc=True,
     )
 
-    #celery.autodiscover_tasks(["app.tasks"])
+    celery.autodiscover_tasks(["app.tasks"])
 
     # Zeitgesteuerte Jobs (Celery Beat)
     celery.conf.beat_schedule = {
