@@ -15,8 +15,6 @@ Schulprojekt: Sensor-/IoT-Dashboard für ein (simuliertes) Asia-Restaurant – m
 - [Ordner- & Dateistruktur](#ordner--dateistruktur)
 - [Bilder / Dokumentation](#bilder--dokumentation)
 - [Troubleshooting](#troubleshooting)
-- [Autoren](#autoren)
-
 ---
 
 ## Projektidee
@@ -215,9 +213,3 @@ project-asia-restaurant/
 - **DB-Probleme**: `MYSQL_*` Werte prüfen und schauen ob `mariadb` läuft (`docker compose ps`).
 - **Celery läuft nicht**: Redis-Service prüfen (Celery nutzt Redis als Broker/Backend).
 - **Build/Dependencies**: `docker compose build --no-cache` probieren.
-
----
-
-## Autoren
-- Bogdan Varareanu
-- Marius Güldner
