@@ -2,7 +2,7 @@ import logging
 from app.celery_app import celery
 from app.models.services import create_measurements, delete_measurements_older_than
 from app.logic.occupancy_estimator import RoomConfig, ModelConfig, Baseline, estimate_people
-from app.logic.rpi.bme680_RCWL_data import get_sensor_data
+from python.app.logic.rpi.bme680 import get_sensor_data
 
 logger = logging.getLogger(__name__)
 

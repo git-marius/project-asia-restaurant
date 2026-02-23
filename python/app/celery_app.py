@@ -18,16 +18,16 @@ def make_celery() -> Celery:
         timezone=os.getenv("TZ", "Europe/Berlin"),
         enable_utc=True,
     )
-    #celery.autodiscover_tasks(["app.tasks"])
+    celery.autodiscover_tasks(["app.tasks"])
     celery.conf.beat_schedule = {
         "read-measurements": {
             "task": "measurements.read_job TEST",
             "schedule": crontab(minute="*/5"),
-            "args": (),  # optional
+            "args": (),
         },
         "delete-old-measurements-daily": {
             "task": "measurements.delete_old TEST",
-            "schedule": crontab(hour=3, minute=0),  # z.B. täglich 03:00
+            "schedule": crontab(hour=3, minute=0), 
             "kwargs": {"days": 30},
         },
     }

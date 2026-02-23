@@ -3,7 +3,6 @@
     const locale = "de-DE";
     const pollMs = 30000;
 
-    // ---------- Navigation / Views ----------
     const navButtons = Array.from(document.querySelectorAll(".nav-btn"));
     const panels = Array.from(document.querySelectorAll("[data-panel]"));
 
@@ -39,7 +38,6 @@
 
     navButtons.forEach((btn) => btn.addEventListener("click", () => setActiveView(btn.dataset.view)));
 
-    // ---------- Chart.js Defaults ----------
     function applyChartDefaults() {
         Chart.defaults.responsive = true;
         Chart.defaults.maintainAspectRatio = false;
@@ -87,7 +85,6 @@
         };
     }
 
-    // ---------- Data / KPI ----------
     let tempChart, scatterChart;
     let pollTimer = null;
     let inFlight = false;
@@ -129,7 +126,7 @@
         if (tempEl && cur.temperature != null) tempEl.textContent = `${cur.temperature.toFixed(1)} °C`;
         if (humEl && cur.humidity != null) humEl.textContent = `${cur.humidity.toFixed(1)}`;
         if (vocEl && cur.voc != null) vocEl.textContent = `${cur.voc.toFixed(0)}`;
-        if (peopleEl) peopleEl.textContent = `${cur.persons ?? "–"}`;
+        if (peopleEl) peopleEl.textContent = `${cur.persons ?? "-"}`;
         if (radarEl) radarEl.textContent = cur.radar ? "Belegt" : "Leer";
 
         if (cur.timestamp) {
@@ -151,13 +148,13 @@
         const p60El = document.getElementById("pred-60");
         const p120El = document.getElementById("pred-120");
 
-        if (aEl) aEl.textContent = r.slope == null ? "–" : r.slope.toFixed(4);
-        if (bEl) bEl.textContent = r.intercept == null ? "–" : r.intercept.toFixed(2);
-        if (r2El) r2El.textContent = r.r2 == null ? "–" : r.r2.toFixed(3);
+        if (aEl) aEl.textContent = r.slope == null ? "-" : r.slope.toFixed(4);
+        if (bEl) bEl.textContent = r.intercept == null ? "-" : r.intercept.toFixed(2);
+        if (r2El) r2El.textContent = r.r2 == null ? "-" : r.r2.toFixed(3);
 
-        if (p0El) p0El.textContent = p.p0 == null ? "–" : `${p.p0.toFixed(1)} °C`;
-        if (p60El) p60El.textContent = p.p60 == null ? "–" : `${p.p60.toFixed(1)} °C`;
-        if (p120El) p120El.textContent = p.p120 == null ? "–" : `${p.p120.toFixed(1)} °C`;
+        if (p0El) p0El.textContent = p.p0 == null ? "-" : `${p.p0.toFixed(1)} °C`;
+        if (p60El) p60El.textContent = p.p60 == null ? "-" : `${p.p60.toFixed(1)} °C`;
+        if (p120El) p120El.textContent = p.p120 == null ? "-" : `${p.p120.toFixed(1)} °C`;
     }
 
     function renderTemp(points) {
@@ -277,7 +274,6 @@
         }
     }
 
-    // ---------- init / polling ----------
     async function refreshOnce() {
         if (inFlight) return;
         inFlight = true;
@@ -303,13 +299,11 @@
         }, pollMs);
     }
 
-    // wire buttons
     const btnRefresh = document.getElementById("btnRefresh");
     const btnRefreshTop = document.getElementById("btnRefreshTop");
     if (btnRefresh) btnRefresh.addEventListener("click", refreshOnce);
     if (btnRefreshTop) btnRefreshTop.addEventListener("click", refreshOnce);
 
-    // boot
     applyChartDefaults();
     setActiveView("dashboard");
     refreshOnce();

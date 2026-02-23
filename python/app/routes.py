@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from app.extensions.db import db
 from app.models import Measurements
 from scipy.stats import linregress
-from app.models.respoitories import get_latest, get_since
+from python.app.models.repositories import get_latest, get_since
 
 bp = Blueprint("main", __name__)
 

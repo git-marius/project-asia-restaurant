@@ -112,8 +112,8 @@ def seed():
     window = raw_data[-48:]
 
     now_utc = datetime.now(timezone.utc)
-    end_ts = _round_down_to_30min(now_utc)  # letzter Messpunkt = "jetzt" (gerundet)
-    start_ts = end_ts - timedelta(hours=24) + timedelta(minutes=30)  # erster Punkt
+    end_ts = _round_down_to_30min(now_utc)
+    start_ts = end_ts - timedelta(hours=24) + timedelta(minutes=30)
 
     for i, (_, voc, temp, hum, persons, radar) in enumerate(window):
         ts = start_ts + timedelta(minutes=30 * i)
