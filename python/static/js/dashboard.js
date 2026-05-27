@@ -10,7 +10,7 @@
     const viewMeta = {
         dashboard: { title: "Dashboard" },
         regression: { title: "Regression" },
-        videos: { title: "Videos" },
+        Videos: { title: "Videos" },
     };
 
     // Merkt sich die zuletzt geladenen Videoeinträge, damit ein Tab-Wechsel nicht neu laden muss.
@@ -39,7 +39,7 @@
         if (titleEl) titleEl.textContent = viewMeta[view]?.title || view;
 
         if (lastData) renderForView(view, lastData);
-        if (view === "videos") renderVideos(lastVideos);
+        if (view === "Videos") renderVideos(lastVideos);
     }
 
     navButtons.forEach((btn) => btn.addEventListener("click", () => setActiveView(btn.dataset.view)));
@@ -371,7 +371,7 @@
             renderTemp(pts);
         } else if (view === "regression") {
             renderScatter(data.scatter?.points || [], data.regression?.line_points || []);
-        } else if (view === "videos") {
+        } else if (view === "Videos") {
             renderVideos(lastVideos);
         }
     }
@@ -392,7 +392,7 @@
                 // Videos separat behandeln: Fehler im Videoverlauf sollen die Messwert-Charts nicht blockieren.
                 const videoData = await loadVideos(controller.signal);
                 lastVideos = videoData.videos || [];
-                if (activeView === "videos") renderVideos(lastVideos);
+                if (activeView === "Videos") renderVideos(lastVideos);
             } catch (e) {
                 console.error(e);
             }
