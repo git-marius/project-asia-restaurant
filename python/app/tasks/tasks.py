@@ -3,6 +3,12 @@ from app.celery_app import celery
 from app.models.services import create_measurements, delete_measurements_older_than
 from app.logic.occupancy_estimator import RoomConfig, ModelConfig, Baseline, estimate_people
 from app.logic.rpi.bme680 import get_sensor_data
+from app.logic.rpi.motion_sensor_infrared import motion_detected
+from app.logic.rpi.motion_camera_capture import capture
+import RPi.GPIO as GPIO
+from datetime import datetime
+import time
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,15 @@ def read_job(self):
             persons=persons,
             radar=motion,
         )
+       
+        if(motion_detected()):
+            capture(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            
+            
+       
+
+       
+
 
         logger.info(
             "Task %s finished: measurement_id=%s temp=%s hum=%s voc=%s persons=%s motion=%s",
@@ -66,3 +81,15 @@ def delete_job(self, days: int = 30):
     except Exception:
         logger.exception("Task %s failed: delete_job(days=%s)", self.request.id, days)
         raise
+    
+@celery.task(bind=True, name="measurements.cameara_capture")
+def read_job(self):
+    """Liest Bewegungssensordaten, startet Videoaufnahme"""
+    logger.info("Task %s started: measurements.cameara_capture", self.request.id)
+    try:
+        if motion_detected():
+            capture(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    except Exception:
+        logger.exception("Task %s failed: measurements.cameara_capture", self.request.id)
+        raise
+    
