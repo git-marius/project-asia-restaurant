@@ -87,7 +87,10 @@ def read_job(self):
     """Liest Bewegungssensordaten, startet Videoaufnahme"""
     logger.info("Task %s started: measurements.cameara_capture", self.request.id)
     try:
+        # Prüfen, ob der Bewegungssensor eine Bewegung erkannt hat
         if motion_detected():
+            # Videoaufnahme starten
+            # Der Dateiname enthält aktuelles Datum und Uhrzeit
             capture(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     except Exception:
         logger.exception("Task %s failed: measurements.cameara_capture", self.request.id)
