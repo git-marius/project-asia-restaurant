@@ -10,6 +10,7 @@ Schulprojekt: Sensor-/IoT-Dashboard für ein (simuliertes) Asia-Restaurant – m
 - [Technologien](#technologien)
 - [Architektur (High Level)](#architektur-high-level)
 - [Neu: Videoaufnahmen bei Bewegung](#neu-videoaufnahmen-bei-bewegung)
+- [Datenmodelle](#datenmodelle)
 - [Setup & Start (Docker)](#setup--start-docker)
 - [Konfiguration (.env)](#konfiguration-env)
 - [Benutzung](#benutzung)
@@ -92,6 +93,16 @@ Docker Compose startet mehrere Services:
 5. `upload_video_file()` lädt das Video in den privaten S3-Bucket, z. B. `videos/YYYY/MM/DD/<timestamp>_<uuid>.mp4`.
 6. `VideoRecording` speichert `recorded_at`, `duration_seconds`, `bucket`, `object_key`, `size_bytes` und `status`.
 7. `GET /api/videos` liefert den Verlauf; `GET /api/videos/<id>/play` erzeugt eine kurzlebige presigned URL.
+
+---
+
+## Datenmodelle
+Die Datenbank speichert Messwerte und Video-Metadaten getrennt:
+
+- `Measurements`: enthält Temperatur, Luftfeuchtigkeit, VOC/Gas-Wert, geschätzte Personenanzahl, Radar-/Bewegungsstatus und Zeitstempel. Diese Daten werden für Dashboard-KPIs, Temperaturverlauf und Regression genutzt.
+- `VideoRecording`: enthält keine Videodatei selbst, sondern nur Metadaten zum Objekt in MinIO/S3: Aufnahmezeit, Dauer, Bucket, Object-Key, Content-Type, Dateigröße, Status und optionalen Fehlertext.
+
+Videos liegen dadurch nicht in MariaDB, sondern im privaten S3-Bucket. Das Dashboard bekommt über `/api/videos/<id>/play` nur eine kurzlebige presigned URL zum Abspielen.
 
 ---
 
@@ -272,6 +283,7 @@ project-asia-restaurant/
 
 ![Dashboard Screenshot](docs/images/gui-dashboard.png)
 ![Regression Screenshot](docs/images/gui-regression.png)
+![Videos Screenshot](docs/images/gui-videos.png)
 
 ---
 
