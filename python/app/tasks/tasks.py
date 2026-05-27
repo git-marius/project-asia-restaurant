@@ -1,16 +1,26 @@
 import logging
-from app.celery_app import celery
-from app.models.services import create_measurements, delete_measurements_older_than
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from uuid import uuid4
+
+from celery import shared_task
+from redis import Redis
+
 from app.logic.occupancy_estimator import RoomConfig, ModelConfig, Baseline, estimate_people
-from app.logic.rpi.bme680 import get_sensor_data
-from app.logic.rpi.motion_sensor_infrared import motion_detected
-from app.logic.rpi.motion_camera_capture import capture
-import RPi.GPIO as GPIO
-from datetime import datetime
-import time
+from app.logic.rpi.motion_camera_capture import capture_mp4
+from app.logic.storage.s3 import get_s3_config, upload_video_file
+from app.models.services import (
+    create_measurements,
+    create_video_recording,
+    delete_measurements_older_than,
+)
 
 
 logger = logging.getLogger(__name__)
+MOTION_ACTIVE_KEY = "videos:motion-active"
+CAPTURE_LOCK_KEY = "videos:capture-lock"
 
 # Feste Konfiguration für Raum und Modell (wird für die Personen-Schätzung benutzt)
 ROOM = RoomConfig(area_m2=180.0, height_m=3.0, ach_per_hour=2.0, v_ref_m3=300.0, ach_ref_per_hour=2.0)
@@ -18,12 +28,33 @@ CFG = ModelConfig(weight_gas=0.8, weight_hum=0.2, n_max=125, i_ref_full=0.20, ga
 BASELINE = Baseline(temperature_c=21.0, rh_percent=35.0, gas_resistance_ohm=22000.0)
 
 
-@celery.task(bind=True, name="measurements.read_job")
+def _redis_client() -> Redis:
+    return Redis.from_url(os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0"), decode_responses=True)
+
+
+def _video_duration_seconds() -> int:
+    return int(os.getenv("VIDEO_CAPTURE_DURATION_SECONDS", "5"))
+
+
+def _video_object_key(recorded_at: datetime) -> str:
+    stamp = recorded_at.strftime("%Y%m%dT%H%M%SZ")
+    return f"videos/{recorded_at:%Y/%m/%d}/{stamp}_{uuid4().hex}.mp4"
+
+
+def _read_motion_sensor() -> bool:
+    from app.logic.rpi.motion_sensor_infrared import motion_detected
+
+    return bool(motion_detected())
+
+
+@shared_task(bind=True, name="measurements.read_job")
 def read_job(self):
     """Liest Sensordaten, schätzt Personenanzahl und speichert einen Messwert in der DB."""
     logger.info("Task %s started: measurements.read_job", self.request.id)
 
     try:
+        from app.logic.rpi.bme680 import get_sensor_data
+
         data = get_sensor_data()  # Sensor auslesen
         temp = data["temperature"]
         hum = data["humidity"]
@@ -40,7 +71,6 @@ def read_job(self):
             room=ROOM,
         )
 
-        # Messwert in DB speichern
         measurement_id = create_measurements(
             temperature=temp,
             humidity=hum,
@@ -48,29 +78,25 @@ def read_job(self):
             persons=persons,
             radar=motion,
         )
-       
-        if(motion_detected()):
-            capture(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            
-            
-       
-
-       
-
 
         logger.info(
             "Task %s finished: measurement_id=%s temp=%s hum=%s voc=%s persons=%s motion=%s",
-            self.request.id, measurement_id, temp, hum, voc, persons, motion
+            self.request.id,
+            measurement_id,
+            temp,
+            hum,
+            voc,
+            persons,
+            motion,
         )
 
         return {"status": "ok", "measurement_id": measurement_id, "persons": persons, "motion": motion}
-
     except Exception:
         logger.exception("Task %s failed: measurements.read_job", self.request.id)
         raise
 
 
-@celery.task(bind=True, name="measurements.delete_old")
+@shared_task(bind=True, name="measurements.delete_old")
 def delete_job(self, days: int = 30):
     """Löscht Messwerte, die älter als X Tage sind (Standard: 30)."""
     logger.info("Task %s started: delete_job(days=%s)", self.request.id, days)
@@ -81,18 +107,81 @@ def delete_job(self, days: int = 30):
     except Exception:
         logger.exception("Task %s failed: delete_job(days=%s)", self.request.id, days)
         raise
-    
-@celery.task(bind=True, name="measurements.cameara_capture")
-def read_job(self):
-    """Liest Bewegungssensordaten, startet Videoaufnahme"""
-    logger.info("Task %s started: measurements.cameara_capture", self.request.id)
+
+
+@shared_task(bind=True, name="videos.capture_on_motion")
+def capture_on_motion(self):
+    """Nimmt pro zusammenhängender Bewegung genau einen Clip auf und lädt ihn nach S3."""
+    logger.info("Task %s started: videos.capture_on_motion", self.request.id)
+    redis_client = _redis_client()
+    duration_seconds = _video_duration_seconds()
+
     try:
-        # Prüfen, ob der Bewegungssensor eine Bewegung erkannt hat
-        if motion_detected():
-            # Videoaufnahme starten
-            # Der Dateiname enthält aktuelles Datum und Uhrzeit
-            capture(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        if not _read_motion_sensor():
+            redis_client.delete(MOTION_ACTIVE_KEY)
+            return {"status": "idle", "motion": False}
+
+        if redis_client.get(MOTION_ACTIVE_KEY):
+            return {"status": "already_active", "motion": True}
+
+        lock = redis_client.lock(
+            CAPTURE_LOCK_KEY,
+            timeout=max(duration_seconds + 30, 60),
+            blocking_timeout=0,
+        )
+        if not lock.acquire(blocking=False):
+            return {"status": "locked", "motion": True}
+
+        recorded_at = datetime.now(timezone.utc)
+        config = get_s3_config()
+        object_key = _video_object_key(recorded_at)
+
+        try:
+            if redis_client.get(MOTION_ACTIVE_KEY):
+                return {"status": "already_active", "motion": True}
+
+            redis_client.set(MOTION_ACTIVE_KEY, "1", ex=max(duration_seconds + 3600, 3600))
+
+            with TemporaryDirectory() as tmp_dir:
+                output_path = Path(tmp_dir) / "capture.mp4"
+                capture_mp4(output_path, duration_seconds=duration_seconds)
+                size_bytes = output_path.stat().st_size
+                bucket = upload_video_file(output_path, object_key=object_key, content_type="video/mp4")
+
+            recording_id = create_video_recording(
+                recorded_at=recorded_at,
+                duration_seconds=duration_seconds,
+                bucket=bucket,
+                object_key=object_key,
+                content_type="video/mp4",
+                size_bytes=size_bytes,
+                status="stored",
+            )
+
+            return {
+                "status": "stored",
+                "motion": True,
+                "video_recording_id": recording_id,
+                "bucket": bucket,
+                "object_key": object_key,
+            }
+        except Exception as exc:
+            create_video_recording(
+                recorded_at=recorded_at,
+                duration_seconds=duration_seconds,
+                bucket=config.bucket,
+                object_key=object_key,
+                content_type="video/mp4",
+                size_bytes=None,
+                status="failed",
+                error_message=str(exc)[:2000],
+            )
+            raise
+        finally:
+            try:
+                lock.release()
+            except Exception:
+                logger.debug("Capture lock was already released or expired", exc_info=True)
     except Exception:
-        logger.exception("Task %s failed: measurements.cameara_capture", self.request.id)
+        logger.exception("Task %s failed: videos.capture_on_motion", self.request.id)
         raise
-    

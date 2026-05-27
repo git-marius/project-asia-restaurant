@@ -1,5 +1,6 @@
 (() => {
     const apiUrl = "/api/dashboard";
+    const videosUrl = "/api/videos?limit=25";
     const locale = "de-DE";
     const pollMs = 30000;
 
@@ -9,10 +10,13 @@
     const viewMeta = {
         dashboard: { title: "Dashboard" },
         regression: { title: "Regression" },
+        videos: { title: "Videos" },
     };
 
     let activeView = "dashboard";
     let lastData = null;
+    let lastVideos = [];
+    let selectedVideoId = null;
 
     function setActiveView(view) {
         activeView = view;
@@ -34,6 +38,7 @@
         if (titleEl) titleEl.textContent = viewMeta[view]?.title || view;
 
         if (lastData) renderForView(view, lastData);
+        if (view === "videos") renderVideos(lastVideos);
     }
 
     navButtons.forEach((btn) => btn.addEventListener("click", () => setActiveView(btn.dataset.view)));
@@ -92,10 +97,21 @@
     const fmtTime = (iso) =>
         new Date(iso).toLocaleString(locale, { hour: "2-digit", minute: "2-digit" });
     const fmtDateTime = (iso) => new Date(iso).toLocaleString(locale);
+    const fmtBytes = (bytes) => {
+        if (bytes == null) return "-";
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    };
 
     async function loadDashboard(signal) {
         const res = await fetch(apiUrl, { cache: "no-store", signal });
         if (!res.ok) throw new Error("API Fehler: " + res.status);
+        return await res.json();
+    }
+
+    async function loadVideos(signal) {
+        const res = await fetch(videosUrl, { cache: "no-store", signal });
+        if (!res.ok) throw new Error("Video API Fehler: " + res.status);
         return await res.json();
     }
 
@@ -155,6 +171,86 @@
         if (p0El) p0El.textContent = p.p0 == null ? "-" : `${p.p0.toFixed(1)} °C`;
         if (p60El) p60El.textContent = p.p60 == null ? "-" : `${p.p60.toFixed(1)} °C`;
         if (p120El) p120El.textContent = p.p120 == null ? "-" : `${p.p120.toFixed(1)} °C`;
+    }
+
+    function setVideoPlayer(video) {
+        const player = document.getElementById("video-player");
+        const metaEl = document.getElementById("video-current-meta");
+        if (!player || !metaEl) return;
+
+        if (!video) {
+            player.removeAttribute("src");
+            player.removeAttribute("data-video-id");
+            player.load();
+            metaEl.textContent = "-";
+            return;
+        }
+
+        if (player.dataset.videoId !== String(video.id)) {
+            player.src = video.play_url;
+            player.dataset.videoId = String(video.id);
+            player.load();
+        }
+
+        metaEl.textContent = `${fmtDateTime(video.recorded_at)} · ${video.duration_seconds}s · ${fmtBytes(video.size_bytes)}`;
+    }
+
+    function renderVideos(videos) {
+        const listEl = document.getElementById("video-list");
+        const emptyEl = document.getElementById("video-empty");
+        const countEl = document.getElementById("video-count");
+        if (!listEl || !emptyEl || !countEl) return;
+
+        const playableVideos = videos.filter((video) => video.status === "stored" && video.play_url);
+        if (!playableVideos.some((video) => video.id === selectedVideoId)) {
+            selectedVideoId = playableVideos[0]?.id ?? null;
+        }
+
+        const selectedVideo = playableVideos.find((video) => video.id === selectedVideoId) || null;
+        setVideoPlayer(selectedVideo);
+
+        countEl.textContent = `${videos.length}`;
+        emptyEl.hidden = videos.length > 0;
+        listEl.innerHTML = "";
+
+        videos.forEach((video) => {
+            const active = video.id === selectedVideoId;
+            const button = document.createElement("button");
+            button.type = "button";
+            button.disabled = video.status !== "stored" || !video.play_url;
+            button.className = active
+                ? "w-full rounded-2xl border border-sky-400/50 bg-sky-400/10 p-3 text-left"
+                : "w-full rounded-2xl border border-white/10 bg-black/20 p-3 text-left hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60";
+
+            const topRow = document.createElement("div");
+            topRow.className = "flex items-center justify-between gap-3";
+
+            const timestamp = document.createElement("div");
+            timestamp.className = "text-sm font-medium text-neutral-100";
+            timestamp.textContent = fmtDateTime(video.recorded_at);
+
+            const status = document.createElement("div");
+            status.className = video.status === "stored"
+                ? "text-xs text-emerald-300"
+                : "text-xs text-rose-300";
+            status.textContent = video.status === "stored" ? "Gespeichert" : "Fehler";
+
+            const details = document.createElement("div");
+            details.className = "mt-2 text-xs text-neutral-400";
+            details.textContent = video.status === "stored"
+                ? `${video.duration_seconds}s · ${fmtBytes(video.size_bytes)}`
+                : (video.error_message || "Aufnahme fehlgeschlagen");
+
+            topRow.append(timestamp, status);
+            button.append(topRow, details);
+            button.addEventListener("click", () => {
+                selectedVideoId = video.id;
+                setVideoPlayer(video);
+                renderVideos(lastVideos);
+            });
+
+            listEl.append(button);
+        });
     }
 
     function renderTemp(points) {
@@ -271,6 +367,8 @@
             renderTemp(pts);
         } else if (view === "regression") {
             renderScatter(data.scatter?.points || [], data.regression?.line_points || []);
+        } else if (view === "videos") {
+            renderVideos(lastVideos);
         }
     }
 
@@ -285,6 +383,14 @@
             setKpis(data);
             setRegression(data);
             renderForView(activeView, data);
+
+            try {
+                const videoData = await loadVideos(controller.signal);
+                lastVideos = videoData.videos || [];
+                if (activeView === "videos") renderVideos(lastVideos);
+            } catch (e) {
+                console.error(e);
+            }
         } catch (e) {
             console.error(e);
         } finally {

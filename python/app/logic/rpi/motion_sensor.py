@@ -1,15 +1,24 @@
-import RPi.GPIO as GPIO
 import time
+
+try:
+    import RPi.GPIO as GPIO
+except (ImportError, RuntimeError):
+    GPIO = None
+
 
 PIR_PIN = 26
 motion_state = False  # globaler Status: False = keine Bewegung, True = Bewegung erkannt
 
-GPIO.setmode(GPIO.BCM)  # BCM-Nummerierung (GPIO-Nummern statt Pin-Nummern)
-GPIO.setup(PIR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # Eingang mit Pull-Down (Standard = LOW)
+if GPIO is not None:
+    GPIO.setmode(GPIO.BCM)  # BCM-Nummerierung (GPIO-Nummern statt Pin-Nummern)
+    GPIO.setup(PIR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)  # Eingang mit Pull-Down (Standard = LOW)
 
 
 def motion_detected(channel):
     """Callback bei Pegelwechsel am PIR: aktualisiert motion_state."""
+    if GPIO is None:
+        return
+
     global motion_state
     if GPIO.input(PIR_PIN):
         motion_state = True
@@ -19,13 +28,14 @@ def motion_detected(channel):
         print("Motion ended")
 
 
-# Event-Listener: reagiert auf steigende UND fallende Flanke (Bewegung startet/endet)
-GPIO.add_event_detect(
-    PIR_PIN,
-    GPIO.BOTH,
-    callback=motion_detected,
-    bouncetime=200,  # Entprellen in ms
-)
+if GPIO is not None:
+    # Event-Listener: reagiert auf steigende UND fallende Flanke (Bewegung startet/endet)
+    GPIO.add_event_detect(
+        PIR_PIN,
+        GPIO.BOTH,
+        callback=motion_detected,
+        bouncetime=200,  # Entprellen in ms
+    )
 
 
 def get_motion_state():
@@ -40,4 +50,5 @@ if __name__ == "__main__":
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        GPIO.cleanup()  # GPIO sauber freigeben
+        if GPIO is not None:
+            GPIO.cleanup()  # GPIO sauber freigeben

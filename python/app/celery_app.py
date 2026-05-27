@@ -18,6 +18,7 @@ def make_celery() -> Celery:
     celery.conf.update(
         timezone=os.getenv("TZ", "Europe/Berlin"),
         enable_utc=True,
+        imports=("app.tasks.tasks",),
     )
 
     celery.autodiscover_tasks(["app.tasks"])
@@ -25,12 +26,17 @@ def make_celery() -> Celery:
     # Zeitgesteuerte Jobs (Celery Beat)
     celery.conf.beat_schedule = {
         "read-measurements": {  # alle 5 Minuten Messwerte lesen
-            "task": "measurements.read_job TEST",
+            "task": "measurements.read_job",
             "schedule": crontab(minute="*/5"),
             "args": (),
         },
+        "capture-video-on-motion": {  # jede Sekunde Bewegung prüfen und ggf. ein Video speichern
+            "task": "videos.capture_on_motion",
+            "schedule": 1.0,
+            "options": {"expires": 1},
+        },
         "delete-old-measurements-daily": {  # täglich um 03:00 alte Daten löschen
-            "task": "measurements.delete_old TEST",
+            "task": "measurements.delete_old",
             "schedule": crontab(hour=3, minute=0),
             "kwargs": {"days": 30},
         },

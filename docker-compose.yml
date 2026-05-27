@@ -29,6 +29,43 @@ services:
     networks:
       - backend
 
+  minio:
+    image: minio/minio:latest
+    container_name: ${PROJECT_NAME}_minio
+    restart: always
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - backend
+
+  minio_init:
+    image: minio/mc:latest
+    container_name: ${PROJECT_NAME}_minio_init
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-restaurant-videos}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          sleep 1
+        done
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set none "local/$$S3_BUCKET"
+    networks:
+      - backend
+
   flask:
     build: ./python
     container_name: ${PROJECT_NAME}_flask
@@ -40,16 +77,25 @@ services:
     depends_on:
       - mariadb
       - redis
+      - minio
+      - minio_init
     environment:
       DB_HOST: ${FLASK_DB_HOST}
       DB_USER: ${FLASK_DB_USER}
       DB_PASS: ${FLASK_DB_PASS}
       DB_NAME: ${FLASK_DB_NAME}
       PORT: ${FLASK_PORT}
-
       TZ: Europe/Berlin
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-restaurant-videos}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-eu-central-1}
+      VIDEO_CAPTURE_DURATION_SECONDS: ${VIDEO_CAPTURE_DURATION_SECONDS:-5}
+      VIDEO_CAPTURE_COMMAND: ${VIDEO_CAPTURE_COMMAND:-}
     networks:
       - backend
 
@@ -62,6 +108,8 @@ services:
     depends_on:
       - mariadb
       - redis
+      - minio
+      - minio_init
     environment:
       DB_HOST: ${FLASK_DB_HOST}
       DB_USER: ${FLASK_DB_USER}
@@ -70,6 +118,14 @@ services:
       TZ: Europe/Berlin
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-restaurant-videos}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-eu-central-1}
+      VIDEO_CAPTURE_DURATION_SECONDS: ${VIDEO_CAPTURE_DURATION_SECONDS:-5}
+      VIDEO_CAPTURE_COMMAND: ${VIDEO_CAPTURE_COMMAND:-}
     command: ["uv", "run", "celery", "-A", "app.celery_app:celery", "worker", "--loglevel=INFO"]
     networks:
       - backend
@@ -83,6 +139,8 @@ services:
     depends_on:
       - mariadb
       - redis
+      - minio
+      - minio_init
     environment:
       DB_HOST: ${FLASK_DB_HOST}
       DB_USER: ${FLASK_DB_USER}
@@ -91,6 +149,14 @@ services:
       TZ: Europe/Berlin
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-restaurant-videos}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-eu-central-1}
+      VIDEO_CAPTURE_DURATION_SECONDS: ${VIDEO_CAPTURE_DURATION_SECONDS:-5}
+      VIDEO_CAPTURE_COMMAND: ${VIDEO_CAPTURE_COMMAND:-}
     command: ["uv", "run", "celery", "-A", "app.celery_app:celery", "beat", "--loglevel=INFO"]
     networks:
       - backend
@@ -129,3 +195,4 @@ networks:
 
 volumes:
   db_data:
+  minio_data:
