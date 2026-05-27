@@ -23,6 +23,7 @@ def _dt_iso(dt: datetime) -> str:
 
 
 def _video_payload(video):
+    """Serialisiert einen Video-Datensatz für das Dashboard."""
     return {
         "id": video.id,
         "recorded_at": _dt_iso(video.recorded_at),
@@ -118,6 +119,7 @@ def api_videos():
     """Liefert die neuesten Videoaufnahmen fürs Dashboard."""
     raw_limit = request.args.get("limit", "25")
     try:
+        # Limit begrenzen, damit das Dashboard nicht versehentlich zu viele DB-Zeilen lädt.
         limit = max(1, min(int(raw_limit), 100))
     except ValueError:
         limit = 25
@@ -137,6 +139,7 @@ def play_video(video_id: int):
         abort(404)
 
     try:
+        # Bucket bleibt privat; der Browser bekommt nur eine kurz gültige S3-URL.
         url = create_presigned_video_url(video.bucket, video.object_key)
     except Exception:
         abort(502)

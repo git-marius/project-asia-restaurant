@@ -19,6 +19,10 @@ from app.models.services import (
 
 
 logger = logging.getLogger(__name__)
+
+# Redis-Keys für Videoaufnahmen:
+# - MOTION_ACTIVE_KEY verhindert mehrere Clips während derselben Bewegungsphase
+# - CAPTURE_LOCK_KEY verhindert parallele Aufnahmeprozesse im Worker
 MOTION_ACTIVE_KEY = "videos:motion-active"
 CAPTURE_LOCK_KEY = "videos:capture-lock"
 
@@ -29,19 +33,23 @@ BASELINE = Baseline(temperature_c=21.0, rh_percent=35.0, gas_resistance_ohm=2200
 
 
 def _redis_client() -> Redis:
+    """Erstellt den Redis-Client aus derselben URL, die Celery als Broker nutzt."""
     return Redis.from_url(os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0"), decode_responses=True)
 
 
 def _video_duration_seconds() -> int:
+    """Liest die Clip-Länge aus der Umgebung; Standard ist 5 Sekunden."""
     return int(os.getenv("VIDEO_CAPTURE_DURATION_SECONDS", "5"))
 
 
 def _video_object_key(recorded_at: datetime) -> str:
+    """Baut den S3-Pfad: videos/YYYY/MM/DD/<timestamp>_<uuid>.mp4."""
     stamp = recorded_at.strftime("%Y%m%dT%H%M%SZ")
     return f"videos/{recorded_at:%Y/%m/%d}/{stamp}_{uuid4().hex}.mp4"
 
 
 def _read_motion_sensor() -> bool:
+    """Importiert den PIR-Sensor erst zur Laufzeit, damit lokale Imports ohne GPIO funktionieren."""
     from app.logic.rpi.motion_sensor_infrared import motion_detected
 
     return bool(motion_detected())
@@ -71,6 +79,7 @@ def read_job(self):
             room=ROOM,
         )
 
+        # Messwert in DB speichern
         measurement_id = create_measurements(
             temperature=temp,
             humidity=hum,
@@ -117,13 +126,16 @@ def capture_on_motion(self):
     duration_seconds = _video_duration_seconds()
 
     try:
+        # Keine Bewegung: Bewegungsphase beenden, damit die nächste Bewegung wieder aufnehmen darf.
         if not _read_motion_sensor():
             redis_client.delete(MOTION_ACTIVE_KEY)
             return {"status": "idle", "motion": False}
 
+        # Bewegung läuft schon: keinen weiteren Clip für dieselbe Bewegungsphase starten.
         if redis_client.get(MOTION_ACTIVE_KEY):
             return {"status": "already_active", "motion": True}
 
+        # Lock schützt vor parallelen Worker-Prozessen und überlappenden Kamera-Aufnahmen.
         lock = redis_client.lock(
             CAPTURE_LOCK_KEY,
             timeout=max(duration_seconds + 30, 60),
@@ -137,17 +149,21 @@ def capture_on_motion(self):
         object_key = _video_object_key(recorded_at)
 
         try:
+            # Zweite Prüfung nach Lock-Acquire, falls ein anderer Worker schneller war.
             if redis_client.get(MOTION_ACTIVE_KEY):
                 return {"status": "already_active", "motion": True}
 
+            # Status bleibt gesetzt, bis der Sensor wieder "keine Bewegung" meldet.
             redis_client.set(MOTION_ACTIVE_KEY, "1", ex=max(duration_seconds + 3600, 3600))
 
+            # Video nur temporär lokal halten; danach wird es nach S3/MinIO geladen.
             with TemporaryDirectory() as tmp_dir:
                 output_path = Path(tmp_dir) / "capture.mp4"
                 capture_mp4(output_path, duration_seconds=duration_seconds)
                 size_bytes = output_path.stat().st_size
                 bucket = upload_video_file(output_path, object_key=object_key, content_type="video/mp4")
 
+            # In MariaDB nur Metadaten speichern; die Videodatei liegt im privaten Bucket.
             recording_id = create_video_recording(
                 recorded_at=recorded_at,
                 duration_seconds=duration_seconds,
@@ -166,6 +182,7 @@ def capture_on_motion(self):
                 "object_key": object_key,
             }
         except Exception as exc:
+            # Fehlerhafte Aufnahme/Upload trotzdem als failed-Eintrag sichtbar machen.
             create_video_recording(
                 recorded_at=recorded_at,
                 duration_seconds=duration_seconds,

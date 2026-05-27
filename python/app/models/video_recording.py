@@ -8,6 +8,7 @@ class VideoRecording(db.Model):
 
     __tablename__ = "video_recordings"
 
+    # Technische Metadaten zur Datei im S3/MinIO-Bucket
     id = db.Column(db.Integer, primary_key=True)
     recorded_at = db.Column(db.DateTime(timezone=True), nullable=False)
     duration_seconds = db.Column(db.Integer, nullable=False)
@@ -15,6 +16,8 @@ class VideoRecording(db.Model):
     object_key = db.Column(db.String(1024), nullable=False)
     content_type = db.Column(db.String(128), nullable=False, default="video/mp4")
     size_bytes = db.Column(db.BigInteger, nullable=True)
+
+    # Status ist "stored" oder "failed"; Fehlertext hilft beim Debuggen im Dashboard/Log.
     status = db.Column(db.String(32), nullable=False, default="stored")
     error_message = db.Column(db.Text, nullable=True)
     created_at = db.Column(

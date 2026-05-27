@@ -13,6 +13,7 @@
         videos: { title: "Videos" },
     };
 
+    // Merkt sich die zuletzt geladenen Videoeinträge, damit ein Tab-Wechsel nicht neu laden muss.
     let activeView = "dashboard";
     let lastData = null;
     let lastVideos = [];
@@ -110,6 +111,7 @@
     }
 
     async function loadVideos(signal) {
+        // Separater API-Call, damit Messwerte/Charts und Videoverlauf unabhängig bleiben.
         const res = await fetch(videosUrl, { cache: "no-store", signal });
         if (!res.ok) throw new Error("Video API Fehler: " + res.status);
         return await res.json();
@@ -174,6 +176,7 @@
     }
 
     function setVideoPlayer(video) {
+        // Setzt den Player auf das aktuell ausgewählte Video oder leert ihn bei fehlenden Daten.
         const player = document.getElementById("video-player");
         const metaEl = document.getElementById("video-current-meta");
         if (!player || !metaEl) return;
@@ -196,6 +199,7 @@
     }
 
     function renderVideos(videos) {
+        // Rendert die Historie und wählt automatisch den neuesten abspielbaren Clip aus.
         const listEl = document.getElementById("video-list");
         const emptyEl = document.getElementById("video-empty");
         const countEl = document.getElementById("video-count");
@@ -385,6 +389,7 @@
             renderForView(activeView, data);
 
             try {
+                // Videos separat behandeln: Fehler im Videoverlauf sollen die Messwert-Charts nicht blockieren.
                 const videoData = await loadVideos(controller.signal);
                 lastVideos = videoData.videos || [];
                 if (activeView === "videos") renderVideos(lastVideos);

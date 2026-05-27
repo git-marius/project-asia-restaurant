@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 def _duration_seconds(duration_seconds: int | None = None) -> int:
+    """Nutzt übergebenen Wert oder Standarddauer aus VIDEO_CAPTURE_DURATION_SECONDS."""
     return duration_seconds or int(os.getenv("VIDEO_CAPTURE_DURATION_SECONDS", "5"))
 
 
@@ -15,6 +16,7 @@ def capture_mp4(output_path: Path, duration_seconds: int | None = None) -> Path:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Optionaler Test-/Alternativbefehl, z. B. für lokale ffmpeg-Testvideos ohne Raspberry-Pi-Kamera.
     custom_command = os.getenv("VIDEO_CAPTURE_COMMAND")
     if custom_command:
         command = custom_command.format(
@@ -27,7 +29,9 @@ def capture_mp4(output_path: Path, duration_seconds: int | None = None) -> Path:
             raise FileNotFoundError(f"Capture command did not create {output_path}")
         return output_path
 
+    # Standard auf dem Raspberry Pi: erst rohes H264 mit raspivid aufnehmen.
     raw_path = output_path.with_suffix(".h264")
+    # Danach in einen browserfähigen MP4-Container schreiben.
     subprocess.run(
         [
             "raspivid",
